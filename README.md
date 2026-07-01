@@ -33,7 +33,7 @@
 
 文件：`weather_practice.py`
 
-使用 `requests` 请求中国天气网页面，用 `BeautifulSoup` 解析 7 天天气预报，提取城市、日期、天气、温度和风力，并用 `pandas` 保存为 Excel 文件。练习网页请求、HTML 解析、CSS 选择器、循环、列表套字典、输入校验和 Excel 导出。
+这是一个封装好的 Python 天气爬虫代码。代码使用函数拆分为城市输入、天气网址构建、网页请求与解析、天气数据提取、Excel 保存等步骤；通过 `requests` 请求中国天气网页面，用 `BeautifulSoup` 解析 7 天天气预报，提取城市、日期、天气、温度和风力，并用 `pandas` 导出 Excel。练习重点包括函数封装、网页请求、HTML 解析、CSS 选择器、循环、列表套字典、输入校验和 Excel 导出。
 
 ## 运行方式
 
