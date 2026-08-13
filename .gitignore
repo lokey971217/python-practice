@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+
+.venv/
+venv/
+
+# Generated local output from the weather exercises.
+*_weather.xlsx
+weather.xlsx
+real_weather.xlsx
+
+# Kept locally as learning drafts, but not published as project files.
+exercises/task_class.py
+通讯录代码.txt

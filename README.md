@@ -1,50 +1,69 @@
-﻿# Python Practice
+# Python Practice
 
-我的 Python 入门练习仓库，用来保存自己手敲的练习代码。
+这是一个记录 Python 学习过程的仓库，也包含目前可以独立运行和展示的任务管理器小项目。
 
-## 已完成练习
+## 目录结构
 
-### Python 字典练习：图书借阅管理器
+```text
+python-practice/
+|-- exercises/              # 学习过程、阶段练习和迭代版本
+|-- projects/
+|   `-- task_manager/
+|       |-- task_app.py     # 程序入口与 JSON 读写
+|       |-- task_model.py   # Task 类
+|       |-- test_task.py    # unittest 自动测试
+|       `-- task_data.json  # 示例任务数据
+|-- .gitignore
+`-- README.md
+```
 
-文件：`book_practice.py`
+## 练习与项目的区别
 
-使用 Python 字典实现图书添加、查找、借阅、归还、删除和打印全部图书，练习函数、返回值、字典增删改查和 `main()` 程序入口。
+- `exercises/` 保存学习过程代码和阶段性版本，可能包含早期写法或重复迭代，用于回顾学习过程，不代表正式项目质量。
+- `projects/` 保存经过整理、可以独立运行的项目。目前包含任务管理器项目。
 
-### Python 字典练习：通讯录管理器
+## 完整项目：任务管理器
 
-文件：`contact_practice.py`
+位置：`projects/task_manager/`
 
-使用 Python 嵌套字典实现联系人添加、查找、修改、删除和打印全部联系人，练习函数、返回值、嵌套字典和基础 CRUD 逻辑。
+- `task_app.py`：任务管理器演示程序和 JSON 数据读写
+- `task_model.py`：任务模型及状态、优先级操作
+- `test_task.py`：基于 `unittest` 的单元测试
+- `task_data.json`：示例任务数据
 
-### 商品价格管理器
+目前实现的功能：
 
-文件：`practice.py`
+- 创建 `Task` 对象
+- 修改任务状态
+- 修改任务优先级
+- 检查任务名称是否为空
+- 将任务对象转换为字典
+- 将任务数据保存为 JSON 并重新读取
+- 使用 `unittest` 进行自动测试
 
-练习字符串转数字、字典、异常处理、循环菜单和价格格式化输出。
+运行项目：
 
-### 字典基础语法探索
+```powershell
+cd projects\task_manager
+python task_app.py
+python test_task.py
+```
 
-文件：`prices.py`
+## 练习记录
 
-练习字典创建、读取、`.get()`、键是否存在和布尔值含义。
+`exercises/` 保存从基础语法到函数封装、异常处理、字典 CRUD、任务拆分和天气数据抓取的练习代码。过程版本也保留在这里，方便回顾学习轨迹。
 
-
-### 天气爬虫练习
-
-文件：`weather_practice.py`
-
-这是一个封装好的 Python 天气爬虫代码。代码使用函数拆分为城市输入、天气网址构建、网页请求与解析、天气数据提取、Excel 保存等步骤；通过 `requests` 请求中国天气网页面，用 `BeautifulSoup` 解析 7 天天气预报，提取城市、日期、天气、温度和风力，并用 `pandas` 导出 Excel。练习重点包括函数封装、网页请求、HTML 解析、CSS 选择器、循环、列表套字典、输入校验和 Excel 导出。
-
-## 运行方式
+天气练习需要额外依赖：
 
 ```powershell
 pip install requests beautifulsoup4 pandas openpyxl
-python book_practice.py
-python contact_practice.py
-python practice.py
-python prices.py
-python weather_practice.py
+python exercises\weather_practice.py
 ```
 
+## 当前学习阶段
 
+目前处于 Python 基础与简单工程化练习阶段，正在学习类、函数、异常处理、文件读写、目录组织和自动测试。
 
+## 后续计划
+
+继续学习大模型 API、Prompt、RAG 和 AI Agent，并逐步整理为可以运行和展示的小项目。
