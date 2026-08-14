@@ -1,9 +1,12 @@
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 
 .venv/
+**/.venv/
 venv/
+.env
 
 # Generated local output from the weather exercises.
 *_weather.xlsx
