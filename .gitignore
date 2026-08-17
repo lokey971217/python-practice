@@ -8,6 +8,10 @@ __pycache__/
 venv/
 .env
 
+# Local runtime data for the AI Task Manager.
+ai_tasks.json
+ai_tasks_backup.json
+
 # Generated local output from the weather exercises.
 *_weather.xlsx
 weather.xlsx

@@ -1,191 +1,111 @@
-# DeepSeek API 学习笔记
+# DeepSeek API 与 AI Task Manager 学习项目
 
 ## 项目简介
 
-本目录记录 DeepSeek API 基础学习成果，重点练习三件事：直接调用模型、让模型返回 JSON 结构化结果，以及使用 Function Calling 完成一次从用户输入到本地函数执行再回传模型的完整流程。
+本目录整理了 DeepSeek API、JSON 结构化输出、Function Calling 和 AI Task Manager 的阶段性学习成果。代码用于学习和演示，不是生产级任务管理系统。涉及模型的脚本会真实请求 DeepSeek API；自动化测试不会调用模型。
 
-这些脚本是学习用示例，会真实调用 DeepSeek API。运行前需要配置 API Key，日常检查代码时不要直接执行脚本，避免产生费用。
+## 已实现功能
 
-## 已完成功能
-
-- `deepseek_api.py`：使用 OpenAI SDK 连接 DeepSeek API，通过 `responses.create()` 发送用户问题；读取模型回复；统计输入、输出和总 token；按示例单价估算费用；捕获认证错误、限流、网络错误、API 状态错误和其他异常。
-- `structured_output.py`：使用 `chat.completions.create()`，通过 `response_format={"type": "json_object"}` 要求模型返回 JSON；用 `json.loads()` 把 JSON 字符串转换为 Python 字典并读取字段。
-- `function_calling.py`：定义本地 `create_task()` 函数；向模型声明 `tools`；让模型根据用户输入决定是否调用函数；解析模型生成的函数参数；执行本地函数；用 `json.dumps()` 把函数结果写回 `messages`；再次调用模型得到最终回复。
+- `deepseek_api.py`：通过 OpenAI Python SDK 兼容接口连接 DeepSeek，并从 `DEEPSEEK_API_KEY` 环境变量读取密钥。
+- `structured_output.py`：要求模型返回 JSON 对象，并用 `json.loads()` 转换成 Python 字典。
+- `function_calling.py`：声明工具及参数 Schema，让模型生成参数，执行本地函数，把结果回传模型并获取最终回复。
+- `ai_task_manager.py`：支持创建、查询和按名称完成任务；通过循环连续对话，输入“退出”结束；任务保存在本地 JSON 文件中，重启后可恢复。
+- 持久化加载会处理 `FileNotFoundError` 和 `JSONDecodeError`。
+- 使用 `main()` 和 `if __name__ == "__main__"` 组织程序入口。
+- `test_ai_task_manager.py`：使用 `unittest`、`setUp`、`tearDown` 和 `unittest.mock.patch` 覆盖 5 项核心行为，避免测试写入真实任务文件。
 
 ## 文件结构
 
 ```text
 projects/llm_basics/
-├── deepseek_api.py
-├── structured_output.py
-├── function_calling.py
+├── ai_task_manager.py       # 支持 Function Calling 和 JSON 持久化的任务管理器
+├── test_ai_task_manager.py  # 5 项 unittest 自动化测试
+├── deepseek_api.py          # DeepSeek API 基础调用示例
+├── structured_output.py     # JSON 结构化输出示例
+├── function_calling.py      # 单工具 Function Calling 学习示例
 ├── README.md
-└── .venv/              # 本地虚拟环境，不提交
+├── ai_tasks.json            # 本地运行数据，不提交
+└── ai_tasks_backup.json     # 本地备份数据，不提交
 ```
 
-## 运行环境
+## Function Calling 完整流程
 
-- Python 3.10 或更高版本
-- `openai` Python 包
-- DeepSeek API Key
-- Windows PowerShell、命令提示符或其他终端
+1. 在 Python 中实现 `create_task`、`list_tasks` 和 `complete_task`。
+2. 在 `tools` 中声明工具名称、说明和 JSON 参数 Schema。
+3. 将用户输入作为消息发送给模型，并允许模型自动选择工具。
+4. 读取模型返回的 `tool_calls`。
+5. 用 `json.loads()` 把模型生成的 JSON 参数转换为 Python 字典。
+6. 根据工具名称执行对应的真实 Python 函数。
+7. 用 `json.dumps()` 将执行结果转换为 JSON，并作为 `tool` 消息加入对话。
+8. 再次调用模型，获得基于工具执行结果的最终回复。
 
-## 安装和运行方法
+当前实现每轮处理模型返回的第一个工具调用。
+
+## AI Task Manager 与 JSON 持久化
+
+- 创建任务：`create_task(name, priority)` 添加“待处理”任务并保存。
+- 查询任务：`list_tasks()` 返回当前全部任务。
+- 完成任务：`complete_task(name)` 按任务名称标记为“已完成”；找不到时返回错误字典。
+- 程序启动时从 `ai_tasks.json` 加载数据，创建或完成任务后重新写入该文件。
+- 文件不存在时返回空列表；JSON 内容损坏时提示并使用空列表。
+- `while` 循环支持连续输入，输入“退出”安全结束。
+
+`ai_tasks.json` 和 `ai_tasks_backup.json` 是本地运行数据，已被 Git 忽略，但不会从本地删除。
+
+## 环境配置（Windows PowerShell）
 
 在仓库根目录执行：
 
 ```powershell
-cd projects/llm_basics
+cd projects\llm_basics
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install openai
-$env:DEEPSEEK_API_KEY="你的 DeepSeek API Key"
+python -m pip install openai
 ```
 
-运行示例：
+仅在当前 PowerShell 会话中安全配置密钥：
 
 ```powershell
-python deepseek_api.py
-python structured_output.py
-python function_calling.py
+$env:DEEPSEEK_API_KEY="在这里填写你自己的密钥"
 ```
 
-注意：以上三个脚本都会请求 DeepSeek API，可能产生费用。
+不要把真实密钥写入代码、README、测试、日志或提交到 Git。`.env` 也已被忽略。
 
-## DeepSeek API 调用说明
+## 运行方法
 
-三个脚本都通过 `OpenAI` 客户端连接 DeepSeek：
+运行 AI Task Manager（会调用 DeepSeek API，可能产生费用）：
 
-```python
-client = OpenAI(
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    base_url="https://api.deepseek.com",
-)
+```powershell
+.\.venv\Scripts\python.exe ai_task_manager.py
 ```
 
-`deepseek_api.py` 使用 `client.responses.create()`，通过 `instructions` 传入系统要求，通过 `input` 传入用户问题。脚本会打印 `response.output_text`，并从 `response.usage` 中读取 token 用量，按代码中的输入单价 `0.14` 和输出单价 `0.28` 估算费用。
+运行其他学习示例同样会调用 API：
 
-异常处理覆盖了常见情况：
-
-- `AuthenticationError`：API Key 错误或未正确配置。
-- `RateLimitError`：请求过于频繁。
-- `APIConnectionError`：网络连接异常。
-- `APIStatusError`：服务端状态错误，其中 `402` 被当作余额不足处理。
-
-## JSON 结构化输出说明
-
-`structured_output.py` 的目标是把用户输入的任务转换成固定字段的 JSON：
-
-- `name`：任务名称
-- `priority`：只能是“普通”或“紧急”
-- `status`：固定为“待处理”
-
-代码使用：
-
-```python
-response_format = {"type": "json_object"}
+```powershell
+.\.venv\Scripts\python.exe deepseek_api.py
+.\.venv\Scripts\python.exe structured_output.py
+.\.venv\Scripts\python.exe function_calling.py
 ```
 
-这会要求模型返回 JSON 对象格式。随后代码取出：
+运行自动化测试（不会调用 API）：
 
-```python
-json_text = response.choices[0].message.content
-task_data = json.loads(json_text)
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -v
 ```
 
-这样就可以像普通字典一样访问 `task_data["name"]`、`task_data["priority"]` 和 `task_data["status"]`。
+## 当前局限与下一步计划
 
-## Function Calling 完整流程
+- 当前使用本地 JSON 文件，不支持数据库、并发写入或多用户隔离。
+- 每轮只处理第一个工具调用，尚未实现多工具调用编排。
+- 模型参数和工具参数的错误处理仍可加强。
+- 尚未实现 RAG、多 Agent、网页界面或权限系统。
+- 下一步可增加输入校验、更多异常测试，并把 API 客户端注入以提升可测试性。
 
-`function_calling.py` 实现了一个 `create_task()` 的完整闭环：
+## 本阶段掌握的技术点
 
-1. 定义本地 Python 函数 `create_task(name, priority)`，返回包含任务名称、优先级和状态的字典。
-2. 在 `tools` 中把 `create_task` 的名称、说明和参数结构告诉模型。
-3. 把用户输入保存到 `messages`。
-4. 第一次调用模型，传入 `messages`、`tools` 和 `tool_choice="auto"`。
-5. 检查模型是否返回 `message.tool_calls`。
-6. 如果模型选择 `create_task`，读取 `tool_call.function.arguments`。
-7. 使用 `json.loads()` 把模型生成的 JSON 参数转换成 Python 字典。
-8. 调用本地 `create_task()` 得到真实执行结果。
-9. 把模型的工具调用消息和本地函数结果追加到 `messages`。
-10. 使用 `json.dumps(..., ensure_ascii=False)` 把任务结果转换成 JSON 字符串后作为 `tool` 消息传回模型。
-11. 第二次调用模型，让模型基于函数执行结果生成最终回复。
-
-## 关键对象和方法的作用
-
-- `tools`：告诉模型当前程序有哪些可调用工具、工具名是什么、参数有哪些、参数类型和必填字段是什么。模型不会直接执行 Python 函数，只会提出调用哪个工具以及传入什么参数。
-- `messages`：保存对话上下文，包括用户输入、模型提出的工具调用、本地工具执行结果。第二次调用模型时，模型依靠完整 `messages` 理解函数已经执行过。
-- `json.loads()`：把 JSON 字符串转换成 Python 对象。在本项目中用于把模型生成的函数参数或结构化输出转换成字典。
-- `json.dumps()`：把 Python 对象转换成 JSON 字符串。在 Function Calling 中用于把本地函数结果作为 `tool` 消息内容传回模型。
-
-## 示例输入与预期输出
-
-### deepseek_api.py
-
-示例输入：
-
-```text
-什么是函数调用？
-```
-
-预期输出：
-
-```text
-模型回答：
-函数调用是让模型请求程序执行特定工具。
-输入的token数量: ...
-输出的token数量: ...
-总token数量: ...
-输入的费用: $...
-输出的费用: $...
-总费用: $...
-```
-
-实际文本和 token 数会随模型响应变化。
-
-### structured_output.py
-
-示例输入：
-
-```text
-明天整理 DeepSeek API 学习笔记，比较紧急
-```
-
-预期输出：
-
-```text
-模型返回的json: {"name":"整理 DeepSeek API 学习笔记","priority":"紧急","status":"待处理"}
-任务名称: 整理 DeepSeek API 学习笔记
-任务优先级: 紧急
-任务状态: 待处理
-```
-
-### function_calling.py
-
-示例输入：
-
-```text
-帮我创建一个紧急任务：完成 AI Task Manager 原型
-```
-
-预期输出：
-
-```text
-模型选择的函数： create_task
-转换后的字典： {'name': '完成 AI Task Manager 原型', 'priority': '紧急'}
-函数执行结果： {'name': '完成 AI Task Manager 原型', 'priority': '紧急', 'status': '待处理'}
-模型最终回复： ...
-```
-
-最终回复由模型生成，内容可能略有不同。
-
-## API Key 安全说明
-
-- 不要把真实 API Key 写进代码或 README。
-- 使用环境变量 `DEEPSEEK_API_KEY` 读取密钥。
-- 本目录内的 `.venv/`、`__pycache__/` 和 `.env` 都不应提交。
-- 如果需要本地保存密钥，可以放在 `.env` 中，但 `.env` 必须被 `.gitignore` 忽略。
-
-## 下一阶段
-
-下一阶段计划进入 AI Task Manager：把当前学习到的 DeepSeek API 调用、JSON 结构化输出和 Function Calling 串起来，逐步实现一个可以从自然语言创建任务、识别优先级、保存任务状态并支持后续管理的任务管理器。
+- 使用 OpenAI Python SDK 兼容接口调用 DeepSeek。
+- 使用环境变量管理 API Key。
+- 使用 JSON 完成模型输出解析、函数参数转换和本地数据持久化。
+- 理解 Function Calling 的工具声明、模型选择、本地执行、结果回传和最终回复流程。
+- 使用函数、循环、异常处理和标准程序入口组织命令行应用。
+- 使用 `unittest`、测试夹具和 `mock.patch` 隔离测试副作用。
