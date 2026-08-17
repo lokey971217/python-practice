@@ -1,55 +1,79 @@
+"""A small AI-assisted task manager built for learning Function Calling.
+
+The language model is responsible for understanding a natural-language request
+and selecting a tool. Local Python functions remain responsible for changing
+task data and persisting it to JSON.
+"""
+
 import json
 import os
+from pathlib import Path
+from typing import Any
 
-from openai import OpenAI
-
-# 1.创建DeepSeek客户端
-client = OpenAI(
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    base_url="https://api.deepseek.com",
-)
-
-TASKS_FILE = "ai_tasks.json"
+from openai import OpenAI, OpenAIError
 
 
-def load_tasks() -> list[dict[str, str]]:
+MODEL_NAME = "deepseek-v4-flash"
+TASKS_FILE = Path(__file__).with_name("ai_tasks.json")
+
+Task = dict[str, str]
+ToolResult = Task | list[Task]
+
+
+def create_client() -> OpenAI:
+    """Create a DeepSeek-compatible client from an environment variable."""
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("请先设置 DEEPSEEK_API_KEY 环境变量")
+
+    return OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+
+
+def load_tasks() -> list[Task]:
+    """Load tasks from disk, returning an empty list when data is unavailable."""
     try:
-        with open(TASKS_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
+        with TASKS_FILE.open("r", encoding="utf-8") as file:
+            tasks = json.load(file)
     except FileNotFoundError:
         return []
     except json.JSONDecodeError:
         print("任务文件内容损坏，将使用空任务列表")
         return []
 
+    if not isinstance(tasks, list):
+        print("任务文件格式错误，将使用空任务列表")
+        return []
+    return tasks
 
-all_tasks: list[dict[str, str]] = load_tasks()
 
-# 2.定义真正执行任务的python函数
+all_tasks: list[Task] = load_tasks()
+
+
 def save_tasks() -> None:
-    with open(TASKS_FILE, "w", encoding="utf-8") as file:
+    """Persist all current tasks to the local JSON data file."""
+    with TASKS_FILE.open("w", encoding="utf-8") as file:
         json.dump(all_tasks, file, ensure_ascii=False, indent=4)
 
 
-def create_task(
-    name: str,
-    priority: str = "普通",
-) -> dict[str, str]:
+def create_task(name: str, priority: str = "普通") -> Task:
+    """Create and persist a task in the pending state."""
     task = {
         "name": name,
         "priority": priority,
         "status": "待处理",
     }
-
     all_tasks.append(task)
     save_tasks()
     return task
 
-def list_tasks() -> list[dict[str, str]]:
+
+def list_tasks() -> list[Task]:
+    """Return all tasks currently held in memory."""
     return all_tasks
 
 
-def complete_task(name: str) -> dict[str, str]:
+def complete_task(name: str) -> Task:
+    """Mark the first task with the requested name as completed."""
     for task in all_tasks:
         if task["name"] == name:
             task["status"] = "已完成"
@@ -58,156 +82,134 @@ def complete_task(name: str) -> dict[str, str]:
 
     return {"error": f"没有找到任务:{name}"}
 
-# 3.向模型介绍create_task工具
-tools = [
+
+TOOLS = [
     {
-        "type":"function",
-        "function":{
-            "name":"create_task",
-            "description":"根据用户的要求创建一个任务",
-            "parameters":{
-                "type":"object",
-                "properties":{
-                    "name":{
-                        "type":"string",
-                        "description":"任务名称",
+        "type": "function",
+        "function": {
+            "name": "create_task",
+            "description": "根据用户的要求创建一个任务",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "任务名称",
                     },
-                    "priority":{
-                        "type":"string",
-                        "enum":["普通","紧急"],
-                        "description":"任务优先级",
+                    "priority": {
+                        "type": "string",
+                        "enum": ["普通", "紧急"],
+                        "description": "任务优先级",
                     },
                 },
-                "required":["name","priority"],
+                "required": ["name", "priority"],
             },
         },
     },
-
     {
-         "type":"function",
-         "function":{
-              "name":"list_tasks",
-              "description":"查看当前保存的所有任务",
-              "parameters":{
-                   "type":"object",
-                   "properties":{},
-              },
-         },
+        "type": "function",
+        "function": {
+            "name": "list_tasks",
+            "description": "查看当前保存的所有任务",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
     },
-
     {
-         "type":"function",
-         "function":{
-              "name":"complete_task",
-              "description":"根据任务名称将指定任务标记为已完成",
-              "parameters":{
-                   "type":"object",
-                   "properties":{
-                        "name":{
-                             "type":"string",
-                             "description":"需要完成的任务名称",
-                        },
-                   },
-                   "required":["name"],
-              },
-         },
+        "type": "function",
+        "function": {
+            "name": "complete_task",
+            "description": "根据任务名称将指定任务标记为已完成",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "需要完成的任务名称",
+                    },
+                },
+                "required": ["name"],
+            },
+        },
     },
 ]
-# 4.接收用户输入
-def main() -> None:
-    while True:
-        user_input = input("请输入你的要求(输入“退出”结束):")
 
+
+def execute_tool(tool_name: str, arguments: dict[str, Any]) -> ToolResult:
+    """Dispatch a model-selected tool to the matching local Python function."""
+    if tool_name == "create_task":
+        return create_task(
+            name=arguments["name"],
+            priority=arguments["priority"],
+        )
+    if tool_name == "list_tasks":
+        return list_tasks()
+    if tool_name == "complete_task":
+        return complete_task(name=arguments["name"])
+    raise ValueError(f"程序暂时不支持工具：{tool_name}")
+
+
+def process_user_request(client: OpenAI, user_input: str) -> str:
+    """Run one complete Function Calling round trip and return the final reply."""
+    messages: list[Any] = [{"role": "user", "content": user_input}]
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        tools=TOOLS,
+        tool_choice="auto",
+    )
+    message = response.choices[0].message
+
+    if not message.tool_calls:
+        return message.content or "模型没有选择可执行的工具"
+
+    tool_call = message.tool_calls[0]
+    arguments = json.loads(tool_call.function.arguments)
+    if not isinstance(arguments, dict):
+        raise ValueError("模型返回的工具参数不是 JSON 对象")
+
+    tool_result = execute_tool(tool_call.function.name, arguments)
+    messages.append(message)
+    messages.append(
+        {
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": json.dumps(tool_result, ensure_ascii=False),
+        }
+    )
+
+    final_response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        tools=TOOLS,
+    )
+    return final_response.choices[0].message.content or "任务操作已完成"
+
+
+def main() -> None:
+    """Start the interactive command-line application."""
+    try:
+        client = create_client()
+    except RuntimeError as error:
+        print(error)
+        return
+
+    while True:
+        user_input = input("请输入你的要求（输入“退出”结束）：")
         if user_input.strip() == "退出":
             print("任务管理器已退出")
             break
 
-
-    # 5.建立对话记录
-        messages = [
-            {
-                "role":"user",
-                "content":user_input,
-            }
-        ]
-
-
-        # 6.第一次调用模型
-        response = client.chat.completions.create(
-            model="deepseek-v4-flash",
-            messages = messages,
-            tools=tools,
-            tool_choice="auto",
-        )
+        try:
+            reply = process_user_request(client, user_input)
+            print("模型最终回复：", reply)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+            print("工具调用参数错误：", error)
+        except OpenAIError as error:
+            print("模型请求失败：", error)
 
 
-        # 7.取出模型消息,看是否要调用create_task函数
-        message = response.choices[0].message
-
-
-        # 8.检查模型是否选择了函数
-        if message.tool_calls:
-            tool_call = message.tool_calls[0]
-
-            # 9.把模型生成的JSON参数转换成python字典
-            arguments_json = tool_call.function.arguments
-            arguments = json.loads(arguments_json)
-
-            print("模型选择的函数：", tool_call.function.name)
-            print("转换后的字典：", arguments)
-
-
-            # 10.真正执行create_task函数
-            if tool_call.function.name == "create_task":
-                task_result = create_task(
-                    name = arguments["name"],
-                    priority = arguments["priority"],
-                )
-
-            elif tool_call.function.name == "list_tasks":
-                task_result = list_tasks()
-
-            elif tool_call.function.name == "complete_task":
-                task_result = complete_task(
-                    name=arguments["name"]
-                )
-
-            else:
-                print("程序暂时不支持这个函数")
-                continue
-
-            print("函数执行结果：",task_result)
-            print("当前所有任务：",all_tasks)
-
-                # 11.保存模型刚才提出的函数调用
-            messages.append(message)
-
-                # 12.保存python函数的执行结果
-            messages.append(
-                    {
-                        "role":"tool",
-                        "tool_call_id":tool_call.id,
-                        "content":json.dumps(
-                            task_result,
-                            ensure_ascii=False,
-                        ),
-                    }
-                )
-
-                # 13.第二次调用模型
-
-            final_response = client.chat.completions.create(
-                        model="deepseek-v4-flash",
-                        messages=messages,
-                        tools=tools,
-                    )
-
-                # 14.取出并打印最终回复
-            final_message = final_response.choices[0].message
-
-            print("模型最终回复：", final_message.content)
-
-        else:
-                    print("程序暂不支持这个函数")
 if __name__ == "__main__":
     main()
