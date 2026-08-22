@@ -8,6 +8,13 @@ __pycache__/
 venv/
 .env
 
+# Local editor and Hugging Face/model caches.
+.vscode/
+.idea/
+**/.cache/
+**/.huggingface/
+*.tmp
+
 # Local runtime data for the AI Task Manager.
 ai_tasks.json
 ai_tasks_backup.json
