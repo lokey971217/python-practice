@@ -3,7 +3,12 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from semantic_rag import generate_answer, retrieve_best_chunk, split_knowledge
+from semantic_rag import (
+    generate_answer, 
+    retrieve_best_chunk,
+    split_knowledge,
+    retrieve_top_k_chunks,
+    )
 
 
 class TestSemanticRAG(unittest.TestCase):
@@ -50,6 +55,39 @@ class TestSemanticRAG(unittest.TestCase):
             "设备需要提前多久预约",
             normalize_embeddings=True,
         )
+
+    @patch("semantic_rag.get_model")
+    def test_retrieve_top_k_chunks(self, mock_get_model) -> None:
+        # 模拟“用户问题”的向量
+        mock_get_model.return_value.encode.return_value = np.array([1.0, 0.0])
+
+        knowledge_chunks = [
+            "最相关片段",
+            "次相关片段",
+            "无关片段",
+        ]
+
+        # 模拟三个知识片段的向量
+        chunk_vectors = np.array([
+            [1.0, 0.0],
+            [0.8, 0.2],
+            [0.0, 1.0],
+        ])
+
+        results = retrieve_top_k_chunks(
+            "测试问题",
+            knowledge_chunks,
+            chunk_vectors,
+            top_k=2,
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0][0], "最相关片段")
+        self.assertEqual(results[1][0], "次相关片段")
+        self.assertGreaterEqual(results[0][1], results[1][1])
+
+
+
 
     @patch("semantic_rag.get_client")
     def test_generate_answer(self, mock_get_client) -> None:

@@ -124,10 +124,18 @@ def main() -> None:
     )
 
     question = input("请输入问题：")
-    best_chunk, best_score = retrieve_best_chunk(
+    top_chunks = retrieve_top_k_chunks(
         question,
         knowledge_chunks,
         chunk_vectors,
+        top_k=2,
+    )
+
+    best_score = top_chunks[0][1]
+
+    context = "\n\n".join(
+        chunk
+        for chunk, score in top_chunks
     )
 
     print("最高相似度", round(float(best_score), 4))
@@ -137,9 +145,9 @@ def main() -> None:
         return
 
     print("\n检索到的知识片段：")
-    print(best_chunk)
+    print(context)
 
-    answer = generate_answer(question, best_chunk)
+    answer = generate_answer(question, context)
 
     print("\n模型生成的答案：")
     print(answer)
