@@ -6,10 +6,43 @@ from unittest.mock import MagicMock, patch
 # 测试仅需让 OpenAI 客户端完成初始化，不会发送真实请求。
 os.environ.setdefault("DEEPSEEK_API_KEY", "test-key")
 
-from agent_basics.rag_agent import run_agent
+from agent_basics.rag_agent import dispatch_tool, run_agent
 
 
 class TestRAGAgent(unittest.TestCase):
+    def test_dispatch_tool_calls_registered_function(self):
+        mock_tool = MagicMock(
+            return_value={
+                "found": True,
+                "chunk": [],
+            }
+        )
+
+        with patch.dict(
+            "agent_basics.rag_agent.TOOL_REGISTRY",
+            {"search_knowledge_base": mock_tool},
+        ):
+            result = dispatch_tool(
+                "search_knowledge_base",
+                {
+                    "question": "设备需要提前多久预约",
+                    "top_k": 2,
+                },
+            )
+
+            self.assertTrue(result["found"])
+            mock_tool.assert_called_once_with(
+                question="设备需要提前多久预约",
+                top_k=2,
+            )
+
+    def test_dispatch_unknown_tool_returns_error(self):
+        result = dispatch_tool(
+            "unknown_tool",
+            {},
+        )
+        self.assertIn("error", result)
+
     @patch("agent_basics.rag_agent.create_task")
     @patch("agent_basics.rag_agent.search_knowledge_base")
     @patch("agent_basics.rag_agent.client.chat.completions.create")
@@ -99,9 +132,16 @@ class TestRAGAgent(unittest.TestCase):
             final_response,
         ]
 
-        answer = run_agent(
-            "设备需要提前多久预约？"
-        )
+        with patch.dict(
+            "agent_basics.rag_agent.TOOL_REGISTRY",
+            {
+                "search_knowledge_base": mock_search,
+                "create_task": mock_task,
+            },
+        ):
+            answer = run_agent(
+                "设备需要提前多久预约？"
+            )
 
         self.assertEqual(
             answer,
@@ -168,9 +208,16 @@ class TestRAGAgent(unittest.TestCase):
             final_response,
         ]
 
-        answer = run_agent(
-            "帮我创建一个学习Python的紧急任务"
-        )
+        with patch.dict(
+            "agent_basics.rag_agent.TOOL_REGISTRY",
+            {
+                "search_knowledge_base": mock_search,
+                "create_task": mock_task,
+            },
+        ):
+            answer = run_agent(
+                "帮我创建一个学习Python的紧急任务"
+            )
 
         self.assertEqual(
             answer,
@@ -219,7 +266,7 @@ class TestRAGAgent(unittest.TestCase):
 
         self.assertEqual(
             answer,
-            "暂不支持这个工具。",
+            "暂不支持这个工具:unknown_tool",
         )
 
         mock_search.assert_not_called()

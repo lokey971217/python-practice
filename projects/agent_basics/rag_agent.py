@@ -66,6 +66,26 @@ tools = [
 ]
 
 
+TOOL_REGISTRY = {
+    "search_knowledge_base": search_knowledge_base,
+    "create_task": create_task,
+}
+
+
+def dispatch_tool(
+    tool_name: str,
+    arguments: dict[str, object],
+) -> object:
+    tool_function = TOOL_REGISTRY.get(tool_name)
+
+    if tool_function is None:
+        return {
+            "error": f"暂不支持这个工具:{tool_name}"
+        }
+
+    return tool_function(**arguments)
+
+
 def run_agent(user_input: str) -> str:
     # 1. 建立对话记录
     messages = [
@@ -104,20 +124,16 @@ def run_agent(user_input: str) -> str:
         )
 
         # 4. 根据工具名称执行不同 Python 函数
-        if tool_call.function.name == "search_knowledge_base":
-            tool_result = search_knowledge_base(
-                question=arguments["question"],
-                top_k=arguments.get("top_k", 2),
-            )
 
-        elif tool_call.function.name == "create_task":
-            tool_result = create_task(
-                name=arguments["name"],
-                priority=arguments.get("priority", "普通"),
-            )
+        tool_name = tool_call.function.name
 
-        else:
-            return "暂不支持这个工具。"
+        tool_result = dispatch_tool(
+            tool_name,
+            arguments,
+        )
+
+        if isinstance(tool_result, dict) and "error" in tool_result:
+            return tool_result["error"]
 
         # 5. 保存模型提出的工具调用
         messages.append(message)
