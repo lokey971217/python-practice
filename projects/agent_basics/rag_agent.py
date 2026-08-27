@@ -9,6 +9,7 @@ RAG_DIR = Path(__file__).parent.parent / "rag_basics"
 sys.path.insert(0, str(RAG_DIR))
 
 from rag_tool import search_knowledge_base
+from agent_basics.task_tool import create_task
 
 
 client = OpenAI(
@@ -39,7 +40,29 @@ tools = [
                 "required": ["question"],
             },
         },
-    }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_task",
+            "description": "根据用户要求创建一个待处理任务。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "任务名称",
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": ["普通", "紧急"],
+                        "description": "任务优先级",
+                    },
+                },
+                "required": ["name", "priority"],
+            },
+        },
+    },
 ]
 
 
@@ -49,10 +72,11 @@ def run_agent(user_input: str) -> str:
         {
             "role": "system",
             "content": (
-                "你是实验室助手。"
+                "你是一个可以使用工具的智能助手。"
                 "当用户询问实验室规定、设备使用、预约、数据管理等"
-                "需要知识库信息的问题时，可以调用 search_knowledge_base 工具。"
-                "如果是普通闲聊，可以直接回答。"
+                "需要知识库信息的问题时，调用 search_knowledge_base 工具。"
+                "当用户要求创建任务时，调用 create_task 工具。"
+                "如果不需要工具，可以直接回答。"
             ),
         },
         {
@@ -79,39 +103,47 @@ def run_agent(user_input: str) -> str:
             tool_call.function.arguments
         )
 
+        # 4. 根据工具名称执行不同 Python 函数
         if tool_call.function.name == "search_knowledge_base":
             tool_result = search_knowledge_base(
                 question=arguments["question"],
                 top_k=arguments.get("top_k", 2),
             )
 
-            # 保存模型提出的工具调用
-            messages.append(message)
-
-            # 保存工具执行结果
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(
-                        tool_result,
-                        ensure_ascii=False,
-                    ),
-                }
+        elif tool_call.function.name == "create_task":
+            tool_result = create_task(
+                name=arguments["name"],
+                priority=arguments.get("priority", "普通"),
             )
 
-            # 第二次调用模型
-            final_response = client.chat.completions.create(
-                model="deepseek-v4-flash",
-                messages=messages,
-                tools=tools,
-            )
+        else:
+            return "暂不支持这个工具。"
 
-            return final_response.choices[0].message.content
+        # 5. 保存模型提出的工具调用
+        messages.append(message)
 
-        return "暂不支持这个工具。"
+        # 6. 把工具执行结果返回给模型
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": json.dumps(
+                    tool_result,
+                    ensure_ascii=False,
+                ),
+            }
+        )
 
-    # 4. 不需要工具时，直接返回模型回答
+        # 7. 第二次调用模型，根据工具结果生成最终回答
+        final_response = client.chat.completions.create(
+            model="deepseek-v4-flash",
+            messages=messages,
+            tools=tools,
+        )
+
+        return final_response.choices[0].message.content
+
+    # 8. 不需要工具时，直接返回模型回答
     return message.content
 
 
