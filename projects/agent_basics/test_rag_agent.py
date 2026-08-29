@@ -14,7 +14,7 @@ class TestRAGAgent(unittest.TestCase):
         mock_tool = MagicMock(
             return_value={
                 "found": True,
-                "chunk": [],
+                "chunks": [],
             }
         )
 
@@ -64,7 +64,12 @@ class TestRAGAgent(unittest.TestCase):
 
         mock_create.return_value = response
 
-        answer = run_agent("1+1等于几？")
+        messages = self.create_messages()
+
+        answer = run_agent(
+            "1+1等于几？",
+            messages,
+        )
 
         self.assertEqual(
             answer,
@@ -77,6 +82,40 @@ class TestRAGAgent(unittest.TestCase):
 
         # 模型只调用一次
         mock_create.assert_called_once()
+
+    @patch("agent_basics.rag_agent.client.chat.completions.create")
+    def test_run_agent_saves_user_and_assistant_messages(
+        self,
+        mock_create,
+    ):
+        messages = self.create_messages()
+
+        message = MagicMock()
+        message.tool_calls = None
+        message.content = "你好，我记住了。"
+
+        response = MagicMock()
+        response.choices = [
+            MagicMock(message=message)
+        ]
+
+        mock_create.return_value = response
+
+        answer = run_agent(
+            "你好",
+            messages,
+        )
+
+        self.assertEqual(
+            answer,
+            "你好，我记住了。",
+        )
+
+        self.assertEqual(len(messages), 3)
+        self.assertEqual(messages[1]["role"], "user")
+        self.assertEqual(messages[1]["content"], "你好")
+        self.assertEqual(messages[2]["role"], "assistant")
+        self.assertEqual(messages[2]["content"], "你好，我记住了。")
 
 
     @patch("agent_basics.rag_agent.create_task")
@@ -132,6 +171,8 @@ class TestRAGAgent(unittest.TestCase):
             final_response,
         ]
 
+        messages = self.create_messages()
+
         with patch.dict(
             "agent_basics.rag_agent.TOOL_REGISTRY",
             {
@@ -139,8 +180,10 @@ class TestRAGAgent(unittest.TestCase):
                 "create_task": mock_task,
             },
         ):
+
             answer = run_agent(
-                "设备需要提前多久预约？"
+                "设备需要提前多久预约？",
+                messages,
             )
 
         self.assertEqual(
@@ -159,6 +202,82 @@ class TestRAGAgent(unittest.TestCase):
 
         # 模型总共调用两次
         self.assertEqual(mock_create.call_count, 2)
+
+    @patch("agent_basics.rag_agent.search_knowledge_base")
+    @patch("agent_basics.rag_agent.client.chat.completions.create")
+    def test_tool_call_saves_tool_messages(
+        self,
+        mock_create,
+        mock_search,
+    ):
+        messages = self.create_messages()
+
+        tool_call = MagicMock()
+        tool_call.id = "call_rag"
+        tool_call.function.name = "search_knowledge_base"
+        tool_call.function.arguments = (
+            '{"question": "设备需要提前多久预约？", "top_k": 2}'
+        )
+
+        first_message = MagicMock()
+        first_message.tool_calls = [tool_call]
+
+        first_response = MagicMock()
+        first_response.choices = [
+            MagicMock(message=first_message)
+        ]
+
+        mock_search.return_value = {
+            "found": True,
+            "question": "设备需要提前多久预约？",
+            "chunks": [
+                {
+                    "content": "实验设备需要至少提前一天预约。",
+                    "score": 0.81,
+                }
+            ],
+        }
+
+        final_message = MagicMock()
+        final_message.content = "实验设备需要至少提前一天预约。"
+
+        final_response = MagicMock()
+        final_response.choices = [
+            MagicMock(message=final_message)
+        ]
+
+        mock_create.side_effect = [
+            first_response,
+            final_response,
+        ]
+
+        with patch.dict(
+            "agent_basics.rag_agent.TOOL_REGISTRY",
+            {
+                "search_knowledge_base": mock_search,
+            },
+        ):
+            answer = run_agent(
+                "设备需要提前多久预约？",
+                messages,
+            )
+
+        self.assertEqual(
+            answer,
+            "实验设备需要至少提前一天预约。",
+        )
+
+        self.assertEqual(len(messages), 5)
+        self.assertEqual(messages[1]["role"], "user")
+        self.assertEqual(messages[2], first_message)
+        self.assertEqual(messages[3]["role"], "tool")
+        self.assertEqual(messages[3]["tool_call_id"], "call_rag")
+        self.assertEqual(messages[4]["role"], "assistant")
+        self.assertEqual(
+            messages[4]["content"],
+            "实验设备需要至少提前一天预约。",
+        )
+
 
     @patch("agent_basics.rag_agent.create_task")
     @patch("agent_basics.rag_agent.search_knowledge_base")
@@ -215,8 +334,12 @@ class TestRAGAgent(unittest.TestCase):
                 "create_task": mock_task,
             },
         ):
+
+            messages = self.create_messages()
+
             answer = run_agent(
-                "帮我创建一个学习Python的紧急任务"
+                "帮我创建一个学习Python的紧急任务",
+                messages,
             )
 
         self.assertEqual(
@@ -260,8 +383,11 @@ class TestRAGAgent(unittest.TestCase):
 
         mock_create.return_value = response
 
+        messages = self.create_messages()
+
         answer = run_agent(
-            "调用一个未知工具"
+            "调用一个未知工具",
+            messages,
         )
 
         self.assertEqual(
@@ -271,6 +397,15 @@ class TestRAGAgent(unittest.TestCase):
 
         mock_search.assert_not_called()
         mock_task.assert_not_called()
+
+    def create_messages(self) -> list[dict]:
+        return [
+            {
+                "role": "system",
+                "content": "你是一个测试助手。",
+            }
+        ]
+
 
 
 if __name__ == "__main__":
