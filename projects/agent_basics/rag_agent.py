@@ -11,13 +11,22 @@ sys.path.insert(0, str(RAG_DIR))
 from rag_tool import search_knowledge_base
 from agent_basics.task_tool import create_task
 
+
 client = OpenAI(
     api_key=os.getenv("DEEPSEEK_API_KEY"),
     base_url="https://api.deepseek.com",
 )
 
+SYSTEM_PROMPT = (
+    "你是一个可以使用工具的智能助手。"
+    "当用户询问实验室规定、设备使用、预约、数据管理等"
+    "需要知识库信息的问题时，调用 search_knowledge_base 工具。"
+    "当用户要求创建任务时，调用 create_task 工具。"
+    "如果不需要工具，可以直接回答。"
+)
 
-tools = [
+
+TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
@@ -85,6 +94,15 @@ def dispatch_tool(
     return tool_function(**arguments)
 
 
+def create_initial_messages() -> list[dict]:
+    return [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT,
+        }
+    ]
+
+
 def run_agent(
         user_input: str,
         messages:list[dict],
@@ -101,7 +119,7 @@ def run_agent(
     response = client.chat.completions.create(
         model="deepseek-v4-flash",
         messages=messages,
-        tools=tools,
+        tools=TOOL_DEFINITIONS,
         tool_choice="auto",
     )
 
@@ -146,7 +164,7 @@ def run_agent(
         final_response = client.chat.completions.create(
             model="deepseek-v4-flash",
             messages=messages,
-            tools=tools,
+            tools=TOOL_DEFINITIONS,
         )
 
         final_message = final_response.choices[0].message
@@ -173,18 +191,7 @@ def run_agent(
 
 
 def main() -> None:
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "你是一个可以使用工具的智能助手。"
-                "当用户询问实验室规定、设备使用、预约、数据管理等"
-                "需要知识库信息的问题时，调用 search_knowledge_base 工具。"
-                "当用户要求创建任务时，调用 create_task 工具。"
-                "如果不需要工具，可以直接回答。"
-            ),
-        }
-    ]
+    messages = create_initial_messages()
 
     while True:
         user_input = input("\n请输入你的问题，输入 exit 退出：")
